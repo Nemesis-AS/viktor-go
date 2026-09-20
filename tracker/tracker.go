@@ -12,6 +12,16 @@ import (
 
 const PROTOCOL_ID uint64 = 0x41727101980
 
+const (
+	ACTION_CONNECT  uint32 = 0
+	ACTION_ANNOUNCE uint32 = 1
+	ACTION_SCRAPE   uint32 = 2
+	ACTION_ERROR    uint32 = 3
+)
+
+// @todo! Move this option to the config
+const TIMEOUT_DURATION time.Duration = 6 * time.Second
+
 type ConnectionRequest struct {
 	ProtocolId    uint64
 	Action        uint32
@@ -37,6 +47,10 @@ type ConnectionResponse struct {
 func Unmarshal(data []byte) (ConnectionResponse, error) {
 	if len(data) != 16 {
 		return ConnectionResponse{}, errors.New("invalid response length")
+	}
+
+	if binary.BigEndian.Uint32(data[0:4]) == 3 {
+		return ConnectionResponse{}, errors.New(string(data[4:]))
 	}
 
 	return ConnectionResponse{
@@ -94,9 +108,11 @@ func (response *ScrapeResponse) Unmarshal(data []byte) error {
 		return errors.New("invalid response length")
 	}
 
-	fmt.Println("Buffer Length:", len(data))
-
 	response.Action = binary.BigEndian.Uint32(data[0:4])
+	if response.Action == 3 {
+		return errors.New(string(data[4:]))
+	}
+
 	response.TransactionId = binary.BigEndian.Uint32(data[4:8])
 	response.Seeders = binary.BigEndian.Uint32(data[8:12])
 	response.Completed = binary.BigEndian.Uint32(data[12:16])
@@ -133,7 +149,6 @@ func (client *TrackerClient) Connect() error {
 		return err
 	}
 	client.Address = *addr
-	fmt.Println("Address:", addr)
 
 	conn, err := net.DialUDP("udp", nil, addr)
 	if err != nil {
@@ -143,35 +158,35 @@ func (client *TrackerClient) Connect() error {
 
 	body := ConnectionRequest{
 		PROTOCOL_ID,
-		0,
+		ACTION_CONNECT,
 		generateTransactionId(),
 	}
-	fmt.Println("Request Bytes:", body.Marshal())
+	// fmt.Println("Request Bytes:", body.Marshal())
 
 	_, err = conn.Write(body.Marshal())
 	if err != nil {
 		return err
 	}
 
-	err = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	err = conn.SetReadDeadline(time.Now().Add(TIMEOUT_DURATION))
 	if err != nil {
 		return err
 	}
 
-	var buf []byte = make([]byte, 16)
-	_, _, err = conn.ReadFrom(buf)
+	var buf []byte = make([]byte, 500)
+	size, _, err := conn.ReadFrom(buf)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("Response bytes:", buf)
+	// fmt.Println("Response bytes:", buf)
 
-	res, err := Unmarshal(buf)
+	res, err := Unmarshal(buf[:size])
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("Response data:", res)
+	fmt.Println("Connect Response:", res)
 	client.ConnectionId = res.ConnectionId
 
 	return nil
@@ -190,7 +205,7 @@ func (client *TrackerClient) Scrape(infoHash [20]byte) error {
 
 	body := ScrapeRequest{
 		client.ConnectionId,
-		2,
+		ACTION_SCRAPE,
 		generateTransactionId(),
 		infoHash,
 	}
@@ -202,7 +217,7 @@ func (client *TrackerClient) Scrape(infoHash [20]byte) error {
 		return err
 	}
 
-	err = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	err = conn.SetReadDeadline(time.Now().Add(TIMEOUT_DURATION))
 	if err != nil {
 		return err
 	}
@@ -217,7 +232,7 @@ func (client *TrackerClient) Scrape(infoHash [20]byte) error {
 	if err != nil {
 		return err
 	}
-	// fmt.Println("Scrape Response:", res)
+	fmt.Println("Scrape Response:", res)
 
 	return nil
 }

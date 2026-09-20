@@ -5,6 +5,7 @@ import (
 
 	"github.com/Nemesis-AS/viktor-go/cli"
 	"github.com/Nemesis-AS/viktor-go/parser"
+	"github.com/Nemesis-AS/viktor-go/tracker"
 )
 
 func main() {
@@ -19,5 +20,11 @@ func main() {
 		fmt.Println(err)
 	}
 
-	fmt.Println(data)
+	announceUrl := data.Announce
+	res, err := tracker.Connect(announceUrl)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Println(res)
 }

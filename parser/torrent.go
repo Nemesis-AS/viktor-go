@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
+	"strings"
+
+	bencode "github.com/jackpal/bencode-go"
 )
 
 type Torrent struct {
@@ -32,10 +36,16 @@ type TorrentFiles struct {
 func (torrent Torrent) String() string {
 	size := (float32(len(torrent.Info.Pieces)/20) * float32(torrent.Info.PieceLength)) / (1024 * 1024)
 
-	return fmt.Sprintf("Announce:\t%v\nAnnounce List:\t%v\nCreation Date:\t%v\nCreated By:\t%v\nComment:\t%v\nName:\t\t%v\nPiece Length:\t%v\nLength:\t\t%v\nPiece Count:\t%v\nTorrent Size:\t%0.2fMiB\n", torrent.Announce, torrent.AnnounceList, torrent.CreationDate, torrent.CreatedBy, torrent.Comment, torrent.Info.Name, torrent.Info.PieceLength, torrent.Info.Length, len(torrent.Info.Pieces), size)
+	var announceList []string
+	for _, announce := range torrent.AnnounceList {
+		announceList = append(announceList, strings.Join(announce, ", "))
+	}
+	formattedAnnounceList := strings.Join(announceList, "\n\t\t")
+
+	return fmt.Sprintf("Announce:\t%v\nAnnounce List:\t%v\nCreation Date:\t%v\nCreated By:\t%v\nComment:\t%v\nName:\t\t%v\nPiece Length:\t%v\nPiece Count:\t%v\nTorrent Size:\t%0.2fMiB\n", torrent.Announce, formattedAnnounceList, torrent.CreationDate, torrent.CreatedBy, torrent.Comment, torrent.Info.Name, torrent.Info.PieceLength, len(torrent.Info.Pieces), size)
 }
 
-func ExtractInfo(data []byte) ([]byte, error) {
+func ExtractInfoRaw(data []byte) ([]byte, error) {
 	marker := []byte("4:info")
 	pos := bytes.Index(data, marker)
 	if pos == -1 {
@@ -93,4 +103,16 @@ func ExtractInfo(data []byte) ([]byte, error) {
 	}
 
 	return nil, errors.New("unterminated info dictionary")
+}
+
+func Parse(filepath string) (Torrent, error) {
+	file, err := os.Open(filepath)
+	if err != nil {
+		return Torrent{}, err
+	}
+
+	var data Torrent
+	err = bencode.Unmarshal(file, &data)
+
+	return data, nil
 }

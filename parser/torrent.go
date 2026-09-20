@@ -1,0 +1,96 @@
+package parser
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"strconv"
+)
+
+type Torrent struct {
+	Announce     string
+	AnnounceList [][]string `bencode:"announce-list"`
+	CreationDate uint64     `becode:"creation date"`
+	CreatedBy    string     `bencode:"created by"`
+	Comment      string     `bencode:"comment"`
+	Info         TorrentInfo
+}
+
+type TorrentInfo struct {
+	Name        string
+	PieceLength uint `bencode:"piece length"`
+	Length      uint
+	Files       []TorrentFiles
+	Pieces      string
+}
+
+type TorrentFiles struct {
+	Length uint
+	Path   []string
+}
+
+func (torrent Torrent) String() string {
+	size := (float32(len(torrent.Info.Pieces)/20) * float32(torrent.Info.PieceLength)) / (1024 * 1024)
+
+	return fmt.Sprintf("Announce:\t%v\nAnnounce List:\t%v\nCreation Date:\t%v\nCreated By:\t%v\nComment:\t%v\nName:\t\t%v\nPiece Length:\t%v\nLength:\t\t%v\nPiece Count:\t%v\nTorrent Size:\t%0.2fMiB\n", torrent.Announce, torrent.AnnounceList, torrent.CreationDate, torrent.CreatedBy, torrent.Comment, torrent.Info.Name, torrent.Info.PieceLength, torrent.Info.Length, len(torrent.Info.Pieces), size)
+}
+
+func ExtractInfo(data []byte) ([]byte, error) {
+	marker := []byte("4:info")
+	pos := bytes.Index(data, marker)
+	if pos == -1 {
+		return nil, errors.New("info dictionary not found")
+	}
+
+	start := pos + len(marker)
+
+	if start >= len(data) || data[start] != 'd' {
+		return nil, errors.New("info is not a dictionary")
+	}
+
+	depth := 0
+
+	for i := start; i < len(data); {
+		switch data[i] {
+		case 'd', 'l':
+			depth++
+			i++
+
+		case 'e':
+			depth--
+			i++
+
+			if depth == 0 {
+				return data[start:i], nil
+			}
+
+		default:
+			if data[i] >= '0' && data[i] <= '9' {
+				colon := bytes.IndexByte(data[i:], ':')
+				if colon == -1 {
+					return nil, errors.New("invalid bencode string")
+				}
+
+				colon += i
+
+				length, err := strconv.Atoi(string(data[i:colon]))
+				if err != nil {
+					return nil, err
+				}
+
+				i = colon + 1 + length
+			} else if data[i] == 'i' {
+				end := bytes.IndexByte(data[i+1:], 'e')
+				if end == -1 {
+					return nil, errors.New("invalid bencode integer")
+				}
+
+				i += end + 2
+			} else {
+				return nil, fmt.Errorf("unexpected byte %q", data[i])
+			}
+		}
+	}
+
+	return nil, errors.New("unterminated info dictionary")
+}

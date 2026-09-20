@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const PROTOCOL_ID uint64 = 0x41727101980
+
 type ConnectionRequest struct {
 	ProtocolId    uint64
 	Action        uint32
@@ -26,12 +28,30 @@ func (req ConnectionRequest) Marshal() []byte {
 	return data
 }
 
+type ConnectionResponse struct {
+	Action        uint32
+	TransactionId uint32
+	ConnectionId  uint64
+}
+
+func Unmarshal(data []byte) (ConnectionResponse, error) {
+	if len(data) != 16 {
+		return ConnectionResponse{}, errors.New("invalid response length")
+	}
+
+	return ConnectionResponse{
+		Action:        binary.BigEndian.Uint32(data[0:4]),
+		TransactionId: binary.BigEndian.Uint32(data[4:8]),
+		ConnectionId:  binary.BigEndian.Uint64(data[8:16]),
+	}, nil
+}
+
 type AnnounceRequest struct {
 	ConnectionId  uint64
 	Action        uint32
 	TransactionId uint32
-	InfoHash      string
-	PeerId        string
+	InfoHash      [20]byte
+	PeerId        [20]byte
 	Downloaded    uint64
 	Let           uint64
 	Uploaded      uint64
@@ -42,85 +62,166 @@ type AnnounceRequest struct {
 	Port          uint32
 }
 
-type ConnectionResponse struct {
+// @todo! Implement Scraping multiple torrents at once
+type ScrapeRequest struct {
+	ConnectionId  uint64
 	Action        uint32
 	TransactionId uint32
-	ConnectionId  uint64
+	InfoHash      [20]byte
 }
 
-func Unmarshal(data []byte) (ConnectionResponse, error) {
-	if len(data) < 16 {
-		return ConnectionResponse{}, errors.New("data length less than struct")
-	}
+func (request ScrapeRequest) Marshal() []byte {
+	data := make([]byte, 36)
 
-	return ConnectionResponse{
-		Action:        uint32(binary.BigEndian.Uint32(data[0:4])),
-		TransactionId: uint32(binary.BigEndian.Uint32(data[4:8])),
-		ConnectionId:  uint64(binary.BigEndian.Uint64(data[8:16])),
-	}, nil
+	binary.BigEndian.PutUint64(data[0:8], request.ConnectionId)
+	binary.BigEndian.PutUint32(data[8:12], request.Action)
+	binary.BigEndian.PutUint32(data[12:16], request.TransactionId)
+	copy(data[16:36], request.InfoHash[:])
+
+	return data
 }
 
-func Connect(url string) (ConnectionResponse, error) {
-	txnId := rand.Int32()
+type ScrapeResponse struct {
+	Action        uint32
+	TransactionId uint32
+	Seeders       uint32
+	Completed     uint32
+	Leechers      uint32
+}
 
-	body := ConnectionRequest{
-		0x41727101980,
-		0,
-		uint32(txnId),
+func (response *ScrapeResponse) Unmarshal(data []byte) error {
+	if len(data) < 8 {
+		return errors.New("invalid response length")
 	}
 
-	fmt.Println("Request Bytes:", body.Marshal())
+	fmt.Println("Buffer Length:", len(data))
 
-	// return ConnectionResponse{}, nil
+	response.Action = binary.BigEndian.Uint32(data[0:4])
+	response.TransactionId = binary.BigEndian.Uint32(data[4:8])
+	response.Seeders = binary.BigEndian.Uint32(data[8:12])
+	response.Completed = binary.BigEndian.Uint32(data[12:16])
+	response.Leechers = binary.BigEndian.Uint32(data[16:20])
 
+	return nil
+}
+
+type TrackerClient struct {
+	Url          string
+	Address      net.UDPAddr
+	ConnectionId uint64
+	InfoHash     [20]byte
+}
+
+func CreateTrackerClient(url string) (TrackerClient, error) {
 	parts := strings.Split(url, "://")
 	if len(parts) > 1 {
 		if parts[0] != "udp" {
-			return ConnectionResponse{}, errors.New("unknwon protocol found")
+			return TrackerClient{}, errors.New("unknwon protocol found")
 		}
 
 		url = parts[1]
 	}
 
-	fmt.Println(url)
+	return TrackerClient{
+		Url: url,
+	}, nil
+}
 
-	addr, err := net.ResolveUDPAddr("udp", url)
+func (client *TrackerClient) Connect() error {
+	addr, err := net.ResolveUDPAddr("udp", client.Url)
 	if err != nil {
-		return ConnectionResponse{}, err
+		return err
 	}
-
+	client.Address = *addr
 	fmt.Println("Address:", addr)
 
 	conn, err := net.DialUDP("udp", nil, addr)
 	if err != nil {
-		return ConnectionResponse{}, err
+		return err
 	}
 	defer conn.Close()
 
+	body := ConnectionRequest{
+		PROTOCOL_ID,
+		0,
+		generateTransactionId(),
+	}
+	fmt.Println("Request Bytes:", body.Marshal())
+
 	_, err = conn.Write(body.Marshal())
 	if err != nil {
-		return ConnectionResponse{}, err
+		return err
 	}
 
 	err = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	if err != nil {
-		return ConnectionResponse{}, err
+		return err
 	}
 
 	var buf []byte = make([]byte, 16)
 	_, _, err = conn.ReadFrom(buf)
 	if err != nil {
-		return ConnectionResponse{}, err
+		return err
 	}
 
 	fmt.Println("Response bytes:", buf)
 
 	res, err := Unmarshal(buf)
 	if err != nil {
-		return ConnectionResponse{}, err
+		return err
 	}
 
 	fmt.Println("Response data:", res)
+	client.ConnectionId = res.ConnectionId
 
-	return res, nil
+	return nil
+}
+
+func (client *TrackerClient) Scrape(infoHash [20]byte) error {
+	if client.ConnectionId == 0 {
+		return errors.New("connection not established, please call Connect first")
+	}
+
+	conn, err := net.DialUDP("udp", nil, &client.Address)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	body := ScrapeRequest{
+		client.ConnectionId,
+		2,
+		generateTransactionId(),
+		infoHash,
+	}
+	// fmt.Println("Scrape Request:", body)
+	// fmt.Println("Scrape Bytes:", body.Marshal())
+
+	_, err = conn.Write(body.Marshal())
+	if err != nil {
+		return err
+	}
+
+	err = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	if err != nil {
+		return err
+	}
+
+	var buf = make([]byte, 500)
+	size, _, err := conn.ReadFrom(buf)
+	// fmt.Println("Scrape response size:", size)
+	// fmt.Println("Scrape bytes received:", buf)
+
+	var res ScrapeResponse = ScrapeResponse{}
+	err = res.Unmarshal(buf[:size])
+	if err != nil {
+		return err
+	}
+	// fmt.Println("Scrape Response:", res)
+
+	return nil
+}
+
+func generateTransactionId() uint32 {
+	return uint32(rand.Int32())
 }

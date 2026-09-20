@@ -2,6 +2,7 @@ package parser
 
 import (
 	"bytes"
+	"crypto/sha1"
 	"errors"
 	"fmt"
 	"os"
@@ -20,17 +21,16 @@ type Torrent struct {
 	Info         TorrentInfo
 }
 
-type TorrentInfo struct {
-	Name        string
-	PieceLength uint `bencode:"piece length"`
-	Length      uint
-	Files       []TorrentFiles
-	Pieces      string
-}
+func Parse(filepath string) (Torrent, error) {
+	file, err := os.Open(filepath)
+	if err != nil {
+		return Torrent{}, err
+	}
 
-type TorrentFiles struct {
-	Length uint
-	Path   []string
+	var data Torrent
+	err = bencode.Unmarshal(file, &data)
+
+	return data, nil
 }
 
 func (torrent Torrent) String() string {
@@ -45,7 +45,25 @@ func (torrent Torrent) String() string {
 	return fmt.Sprintf("Announce:\t%v\nAnnounce List:\t%v\nCreation Date:\t%v\nCreated By:\t%v\nComment:\t%v\nName:\t\t%v\nPiece Length:\t%v\nPiece Count:\t%v\nTorrent Size:\t%0.2fMiB\n", torrent.Announce, formattedAnnounceList, torrent.CreationDate, torrent.CreatedBy, torrent.Comment, torrent.Info.Name, torrent.Info.PieceLength, len(torrent.Info.Pieces), size)
 }
 
-func ExtractInfoRaw(data []byte) ([]byte, error) {
+type TorrentInfo struct {
+	Name        string
+	PieceLength uint `bencode:"piece length"`
+	Length      uint
+	Files       []TorrentFiles
+	Pieces      string
+}
+
+type TorrentFiles struct {
+	Length uint
+	Path   []string
+}
+
+func ExtractInfoRaw(filePath string) ([]byte, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, errors.New("could not open file")
+	}
+
 	marker := []byte("4:info")
 	pos := bytes.Index(data, marker)
 	if pos == -1 {
@@ -105,14 +123,11 @@ func ExtractInfoRaw(data []byte) ([]byte, error) {
 	return nil, errors.New("unterminated info dictionary")
 }
 
-func Parse(filepath string) (Torrent, error) {
-	file, err := os.Open(filepath)
+func GetInfoHash(filePath string) ([20]byte, error) {
+	infoData, err := ExtractInfoRaw(filePath)
 	if err != nil {
-		return Torrent{}, err
+		return [20]byte{}, errors.New("failed to open file")
 	}
 
-	var data Torrent
-	err = bencode.Unmarshal(file, &data)
-
-	return data, nil
+	return sha1.Sum(infoData), nil
 }

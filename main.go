@@ -18,13 +18,31 @@ func main() {
 	data, err := parser.Parse(torrentPath)
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
 
 	announceUrl := data.Announce
-	res, err := tracker.Connect(announceUrl)
+	client, err := tracker.CreateTrackerClient(announceUrl)
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
 
-	fmt.Println(res)
+	err = client.Connect()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	infoHash, err := parser.GetInfoHash(torrentPath)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	err = client.Scrape(infoHash)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 }

@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	bencode "github.com/jackpal/bencode-go"
+
+	"github.com/Nemesis-AS/viktor-go/utils"
 )
 
 type Torrent struct {
@@ -26,9 +28,13 @@ func Parse(filepath string) (Torrent, error) {
 	if err != nil {
 		return Torrent{}, err
 	}
+	defer file.Close()
 
 	var data Torrent
 	err = bencode.Unmarshal(file, &data)
+	if err != nil {
+		return Torrent{}, err
+	}
 
 	return data, nil
 }
@@ -126,8 +132,29 @@ func ExtractInfoRaw(filePath string) ([]byte, error) {
 func GetInfoHash(filePath string) ([20]byte, error) {
 	infoData, err := ExtractInfoRaw(filePath)
 	if err != nil {
-		return [20]byte{}, errors.New("failed to open file")
+		return [20]byte{}, err
 	}
 
 	return sha1.Sum(infoData), nil
+}
+
+type TorrentState struct {
+	TorrentRef Torrent
+	InfoHash   [20]byte
+	PeerId     [20]byte
+	Key        uint32
+	Downloaded uint64
+	Left       uint64
+	Uploaded   uint64
+}
+
+func InitializeTorrentState(infoHash [20]byte, torrent Torrent) TorrentState {
+	var torrentSize uint64 = uint64(torrent.Info.PieceLength) * uint64(len(torrent.Info.Pieces))
+
+	return TorrentState{
+		InfoHash: infoHash,
+		PeerId:   utils.GeneratePeerId(),
+		Key:      utils.GenerateKey(),
+		Left:     torrentSize, // @todo! Add disk checking for stats
+	}
 }

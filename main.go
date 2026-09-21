@@ -40,9 +40,17 @@ func main() {
 		return
 	}
 
-	err = client.Scrape(infoHash)
+	torrentState := parser.InitializeTorrentState(infoHash, data)
+
+	err = client.Announce(torrentState, tracker.EVENT_NONE)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
+	// err = client.Scrape(infoHash)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return
+	// }
 }

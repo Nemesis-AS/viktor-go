@@ -15,7 +15,10 @@ func ParseArgs() (string, error) {
 
 	torrentPath := args[0]
 
-	cwd, _ := os.Getwd()
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
 	filePath := path.Join(cwd, torrentPath)
 
 	return filePath, nil

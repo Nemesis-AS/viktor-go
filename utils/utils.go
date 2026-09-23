@@ -6,6 +6,7 @@ func GenerateTransactionId() uint32 {
 	return rand.Uint32()
 }
 
+// @todo! Implement proper peer id format according to BEP0020
 func GeneratePeerId() [20]byte {
 	var peerId [20]byte = [20]byte{}
 	charset := "abcdeffghijklmnopqrstuvwxyz1234567890"

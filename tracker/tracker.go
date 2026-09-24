@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Nemesis-AS/viktor-go/config"
 	"github.com/Nemesis-AS/viktor-go/parser"
 	"github.com/Nemesis-AS/viktor-go/utils"
 )
@@ -27,9 +28,6 @@ const (
 	EVENT_STARTED   uint32 = 2
 	EVENT_STOPPED   uint32 = 3
 )
-
-// @todo! Move this option to the config
-const TIMEOUT_DURATION time.Duration = 6 * time.Second
 
 type ConnectionRequest struct {
 	ProtocolId    uint64
@@ -188,7 +186,8 @@ func (response *ScrapeResponse) Unmarshal(data []byte) error {
 }
 
 type TrackerClient struct {
-	Url          string
+	Url string
+	// @todo! Revisit if this should be a pointer type
 	Address      net.UDPAddr
 	ConnectionId uint64
 }
@@ -233,7 +232,7 @@ func (client *TrackerClient) Connect() error {
 		return err
 	}
 
-	err = conn.SetReadDeadline(time.Now().Add(TIMEOUT_DURATION))
+	err = conn.SetReadDeadline(time.Now().Add(config.TRACKER_TIMEOUT_DURATION))
 	if err != nil {
 		return err
 	}
@@ -290,7 +289,7 @@ func (client *TrackerClient) Announce(state parser.TorrentState, event uint32) e
 		return err
 	}
 
-	err = conn.SetReadDeadline(time.Now().Add(TIMEOUT_DURATION))
+	err = conn.SetReadDeadline(time.Now().Add(config.TRACKER_TIMEOUT_DURATION))
 	if err != nil {
 		return err
 	}
@@ -336,7 +335,7 @@ func (client *TrackerClient) Scrape(infoHash [20]byte) error {
 		return err
 	}
 
-	err = conn.SetReadDeadline(time.Now().Add(TIMEOUT_DURATION))
+	err = conn.SetReadDeadline(time.Now().Add(config.TRACKER_TIMEOUT_DURATION))
 	if err != nil {
 		return err
 	}

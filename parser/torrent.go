@@ -149,12 +149,13 @@ type TorrentState struct {
 }
 
 func InitializeTorrentState(infoHash [20]byte, torrent Torrent) TorrentState {
-	var torrentSize uint64 = uint64(torrent.Info.PieceLength) * uint64(len(torrent.Info.Pieces))
+	var torrentSize uint64 = uint64(torrent.Info.PieceLength) * uint64(len(torrent.Info.Pieces)/20)
 
 	return TorrentState{
-		InfoHash: infoHash,
-		PeerId:   utils.GeneratePeerId(),
-		Key:      utils.GenerateKey(),
-		Left:     torrentSize, // @todo! Add disk checking for stats
+		InfoHash:   infoHash,
+		PeerId:     utils.GeneratePeerId(),
+		Key:        utils.GenerateKey(),
+		TorrentRef: torrent,
+		Left:       torrentSize, // @todo! Add disk checking for stats
 	}
 }

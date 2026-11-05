@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/Nemesis-AS/viktor-go/config"
-	"github.com/Nemesis-AS/viktor-go/parser"
 	"github.com/Nemesis-AS/viktor-go/utils"
 )
 
@@ -71,8 +70,8 @@ type AnnounceRequest struct {
 	ConnectionId  uint64
 	Action        uint32
 	TransactionId uint32
-	InfoHash      [20]byte
-	PeerId        [20]byte
+	InfoHash      utils.SHA1Hash
+	PeerId        utils.PeerIdType
 	Downloaded    uint64
 	Left          uint64
 	Uploaded      uint64
@@ -145,7 +144,7 @@ type ScrapeRequest struct {
 	ConnectionId  uint64
 	Action        uint32
 	TransactionId uint32
-	InfoHash      [20]byte
+	InfoHash      utils.SHA1Hash
 }
 
 func (request ScrapeRequest) Marshal() []byte {
@@ -257,14 +256,14 @@ func (client *TrackerClient) Connect() error {
 	return nil
 }
 
-func (client *TrackerClient) Announce(state parser.TorrentState, event uint32) error {
+func (client *TrackerClient) Announce(infoHash utils.SHA1Hash, peerId utils.PeerIdType, downloaded uint64, left uint64, uploaded uint64, key uint32, event uint32) (AnnounceResponse, error) {
 	if client.ConnectionId == 0 {
-		return errors.New("connection not established, please call Connect first")
+		return AnnounceResponse{}, errors.New("connection not established, please call Connect first")
 	}
 
 	conn, err := net.DialUDP("udp", nil, &client.Address)
 	if err != nil {
-		return err
+		return AnnounceResponse{}, err
 	}
 	defer conn.Close()
 
@@ -272,45 +271,45 @@ func (client *TrackerClient) Announce(state parser.TorrentState, event uint32) e
 		client.ConnectionId,
 		ACTION_ANNOUNCE,
 		utils.GenerateTransactionId(),
-		state.InfoHash,
-		state.PeerId,
-		state.Downloaded,
-		state.Left,
-		state.Uploaded,
+		infoHash,
+		peerId,
+		downloaded,
+		left,
+		uploaded,
 		event,
 		0,
-		state.Key,
+		key,
 		-1,
-		40000, // @todo! Update this based on the TCP connection
+		config.INCOMING_PORT,
 	}
 
 	_, err = conn.Write(body.Marshal())
 	if err != nil {
-		return err
+		return AnnounceResponse{}, err
 	}
 
 	err = conn.SetReadDeadline(time.Now().Add(config.TRACKER_TIMEOUT_DURATION))
 	if err != nil {
-		return err
+		return AnnounceResponse{}, err
 	}
 
 	buf := make([]byte, 500)
 	size, _, err := conn.ReadFrom(buf)
 	if err != nil {
-		return err
+		return AnnounceResponse{}, err
 	}
 
 	var res AnnounceResponse = AnnounceResponse{}
 	err = res.Unmarshal(buf[:size])
 	if err != nil {
-		return err
+		return AnnounceResponse{}, err
 	}
 	fmt.Println("Announce response:", res)
 
-	return nil
+	return res, nil
 }
 
-func (client *TrackerClient) Scrape(infoHash [20]byte) error {
+func (client *TrackerClient) Scrape(infoHash utils.SHA1Hash) error {
 	if client.ConnectionId == 0 {
 		return errors.New("connection not established, please call Connect first")
 	}

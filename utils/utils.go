@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"encoding/binary"
 	"math/rand/v2"
+	"net/netip"
 	"strings"
 
 	"github.com/Nemesis-AS/viktor-go/config"
@@ -11,8 +13,8 @@ func GenerateTransactionId() uint32 {
 	return rand.Uint32()
 }
 
-func GeneratePeerId() [20]byte {
-	var peerId [20]byte = [20]byte{}
+func GeneratePeerId() SHA1Hash {
+	var peerId SHA1Hash = [20]byte{}
 	charset := "abcdeffghijklmnopqrstuvwxyz1234567890"
 
 	peerId[0] = '-'
@@ -31,4 +33,10 @@ func GeneratePeerId() [20]byte {
 
 func GenerateKey() uint32 {
 	return rand.Uint32()
+}
+
+func IntToIP(nn uint32) string {
+	var bytes [4]byte
+	binary.BigEndian.PutUint32(bytes[:], nn)
+	return netip.AddrFrom4(bytes).String()
 }

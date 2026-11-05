@@ -17,7 +17,7 @@ import (
 type Torrent struct {
 	Announce     string
 	AnnounceList [][]string `bencode:"announce-list"`
-	CreationDate uint64     `becode:"creation date"`
+	CreationDate uint64     `bencode:"creation date"`
 	CreatedBy    string     `bencode:"created by"`
 	Comment      string     `bencode:"comment"`
 	Info         TorrentInfo
@@ -129,33 +129,11 @@ func ExtractInfoRaw(filePath string) ([]byte, error) {
 	return nil, errors.New("unterminated info dictionary")
 }
 
-func GetInfoHash(filePath string) ([20]byte, error) {
+func GetInfoHash(filePath string) (utils.SHA1Hash, error) {
 	infoData, err := ExtractInfoRaw(filePath)
 	if err != nil {
-		return [20]byte{}, err
+		return utils.SHA1Hash{}, err
 	}
 
 	return sha1.Sum(infoData), nil
-}
-
-type TorrentState struct {
-	TorrentRef Torrent
-	InfoHash   [20]byte
-	PeerId     [20]byte
-	Key        uint32
-	Downloaded uint64
-	Left       uint64
-	Uploaded   uint64
-}
-
-func InitializeTorrentState(infoHash [20]byte, torrent Torrent) TorrentState {
-	var torrentSize uint64 = uint64(torrent.Info.PieceLength) * uint64(len(torrent.Info.Pieces)/20)
-
-	return TorrentState{
-		InfoHash:   infoHash,
-		PeerId:     utils.GeneratePeerId(),
-		Key:        utils.GenerateKey(),
-		TorrentRef: torrent,
-		Left:       torrentSize, // @todo! Add disk checking for stats
-	}
 }

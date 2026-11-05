@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/Nemesis-AS/viktor-go/config"
-	"github.com/Nemesis-AS/viktor-go/parser"
+	"github.com/Nemesis-AS/viktor-go/utils"
 )
 
 const (
@@ -37,11 +37,11 @@ type HandshakePacket struct {
 	SignatureLength byte
 	Signature       [19]byte
 	Reserved        [8]byte
-	InfoHash        [20]byte
-	PeerId          [20]byte
+	InfoHash        utils.SHA1Hash
+	PeerId          utils.PeerIdType
 }
 
-func CreateHandshakeReq(infoHash [20]byte, peerId [20]byte) HandshakePacket {
+func CreateHandshakeReq(infoHash utils.SHA1Hash, peerId utils.PeerIdType) HandshakePacket {
 	return HandshakePacket{
 		SignatureLength: BITTORRENT_SIGNATURE_LENGTH,
 		Signature:       BITTORRENT_SIGNATURE,
@@ -110,14 +110,14 @@ func (pkt *PeerMessagePacket) Unmarshal(data []byte) error {
 
 type PeerConn struct {
 	Connection     *net.TCPConn
-	PeerId         [20]byte // ID of the connected peer, not self
+	PeerId         utils.PeerIdType // ID of the connected peer, not self
 	AmChoking      bool
 	AmInterested   bool
 	PeerChoking    bool
 	PeerInterested bool
 }
 
-func (peer *PeerConn) Connect(peerUrl string, torrent parser.TorrentState) error {
+func (peer *PeerConn) Connect(peerUrl string, infoHash utils.SHA1Hash, peerId utils.PeerIdType) error {
 	addr, err := net.ResolveTCPAddr("tcp", peerUrl)
 	if err != nil {
 		return err
@@ -130,7 +130,7 @@ func (peer *PeerConn) Connect(peerUrl string, torrent parser.TorrentState) error
 
 	peer.Connection = conn
 
-	err = peer.handshake(torrent.InfoHash, torrent.PeerId)
+	err = peer.handshake(infoHash, peerId)
 	if err != nil {
 		conn.Close()
 		peer.Connection = nil
@@ -146,7 +146,7 @@ func (peer *PeerConn) Connect(peerUrl string, torrent parser.TorrentState) error
 	return nil
 }
 
-func (peer *PeerConn) handshake(infoHash [20]byte, peerId [20]byte) error {
+func (peer *PeerConn) handshake(infoHash utils.SHA1Hash, peerId utils.PeerIdType) error {
 	if peer.Connection == nil {
 		return errors.New("connection not initialized yet")
 	}
@@ -288,12 +288,11 @@ func (peer *PeerConn) MarkHave(pieceIdx uint32) error {
 	return nil
 }
 
-func (peer *PeerConn) SendBitfield(state parser.TorrentState) error {
+func (peer *PeerConn) SendBitfield(pieceCount uint32) error {
 	if peer.Connection == nil {
 		return errors.New("connection not initialized yet")
 	}
 
-	pieceCount := uint32(len(state.TorrentRef.Info.Pieces) / 20)
 	bitfield := make([]byte, uint32(math.Ceil(float64(pieceCount)/8)))
 
 	// @todo! Read disk for correct data

@@ -29,6 +29,14 @@ func main() {
 
 	session := session.TorrentSession{}
 	err = session.CreateTorrentSession(data, infoHash)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-	session.Start()
+	err = session.Start()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 }

@@ -33,6 +33,8 @@ func (session *TorrentSession) CreateTorrentSession(torrent parser.Torrent, info
 	session.PeerId = utils.GeneratePeerId()
 	session.Key = utils.GenerateKey()
 
+	// @todo! Initialize the state as well
+
 	return nil
 }
 
@@ -68,9 +70,10 @@ func (session *TorrentSession) GetPeers() ([]PeerAddr, error) {
 	var peers []PeerAddr
 
 	for _, trackerConn := range session.Trackers {
-		response, err := trackerConn.Announce(session.InfoHash, session.PeerId, session.Downloaded, session.Left, session.Uploaded, session.Key, 2)
+		response, err := trackerConn.Announce(session.InfoHash, session.PeerId, session.Downloaded, session.Left, session.Uploaded, session.Key, tracker.EVENT_STARTED) // @todo! Make event dynamic
 		if err != nil {
-			return nil, err
+			fmt.Println("Announce returned an error: %w", err)
+			continue
 		}
 
 		for idx, ip := range response.IpAddresses {
@@ -97,7 +100,9 @@ func (session *TorrentSession) ConnectPeers(peers []PeerAddr) {
 		err := conn.Connect(addr, session.InfoHash, session.PeerId)
 		if err != nil {
 			// @todo! Add WARN log
-			conn.Connection.Close()
+			if conn.Connection != nil {
+				conn.Connection.Close()
+			}
 			continue
 		}
 
@@ -119,6 +124,9 @@ func (session *TorrentSession) Start() error {
 
 	// Step2: Find the Peers
 	peers, err := session.GetPeers()
+	if err != nil {
+		return err
+	}
 
 	// Step3: Connect to Peers
 	session.ConnectPeers(peers)

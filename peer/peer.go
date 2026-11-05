@@ -103,7 +103,7 @@ func (pkt *PeerMessagePacket) Unmarshal(data []byte) error {
 
 	pkt.Length = binary.BigEndian.Uint32(data[0:4])
 	pkt.Type = data[4]
-	pkt.Payload = data[4:]
+	pkt.Payload = data[5:]
 
 	return nil
 }

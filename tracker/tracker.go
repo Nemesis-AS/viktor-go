@@ -166,6 +166,7 @@ type ScrapeResponse struct {
 	Leechers      uint32
 }
 
+// @todo! Fix the response. It may panic for lengths > 8 & < 20
 func (response *ScrapeResponse) Unmarshal(data []byte) error {
 	if len(data) < 8 {
 		return errors.New("invalid response length")

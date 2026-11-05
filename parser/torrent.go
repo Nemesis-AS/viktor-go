@@ -67,7 +67,7 @@ type TorrentFiles struct {
 func ExtractInfoRaw(filePath string) ([]byte, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, errors.New("could not open file")
+		return nil, fmt.Errorf("open torrent %q: %w", filePath, err)
 	}
 
 	marker := []byte("4:info")
